@@ -8,6 +8,7 @@ import shutil
 import sys
 import webbrowser as wb
 from functools import partial
+import log
 
 try:
     from PyQt5.QtGui import *
@@ -48,7 +49,7 @@ from libs.create_ml_io import JSON_EXT
 from libs.ustr import ustr
 from libs.hashableQListWidgetItem import HashableQListWidgetItem
 
-__appname__ = 'labelImg'
+__appname__ = 'labelTask'
 
 
 class WindowMixin(object):
@@ -76,6 +77,9 @@ class MainWindow(QMainWindow, WindowMixin):
     def __init__(self, default_filename=None, default_prefdef_class_file=None, default_save_dir=None):
         super(MainWindow, self).__init__()
         self.setWindowTitle(__appname__)
+        log.info(f"filename:", default_filename)
+        log.info(f"class_file:", default_prefdef_class_file)
+        log.info(f"save_dir:", default_save_dir)
 
         # Load setting in the main thread
         self.settings = Settings()
@@ -105,7 +109,8 @@ class MainWindow(QMainWindow, WindowMixin):
 
         self._no_selection_slot = False
         self._beginner = True
-        self.screencast = "https://youtu.be/p0nR2YsCY_U"
+        # self.screencast = "https://youtu.be/p0nR2YsCY_U"
+        self.screencast = "https://www.bilibili.com/video/BV13N4y1n7Bd/?spm_id_from=333.337.search-card.all.click&vd_source=2ee2d356e26b72de67452f6e61a4921f"
 
         # Load predefined classes to the list
         self.load_predefined_classes(default_prefdef_class_file)
@@ -113,7 +118,8 @@ class MainWindow(QMainWindow, WindowMixin):
         if self.label_hist:
             self.default_label = self.label_hist[0]
         else:
-            print("Not find:/data/predefined_classes.txt (optional)")
+            log.critical(f"not found: {default_prefdef_class_file}")
+            # print("Not find:/data/predefined_classes.txt (optional)")
 
         # Main widgets and related state.
         self.label_dialog = LabelDialog(parent=self, list_item=self.label_hist)
@@ -911,7 +917,7 @@ class MainWindow(QMainWindow, WindowMixin):
             else:
                 self.label_file.save(annotation_file_path, shapes, self.file_path, self.image_data,
                                      self.line_color.getRgb(), self.fill_color.getRgb())
-            print('Image:{0} -> Annotation:{1}'.format(self.file_path, annotation_file_path))
+            log.info('Image:{0} -> Annotation:{1}'.format(self.file_path, annotation_file_path))
             return True
         except LabelFileError as e:
             self.error_message(u'Error saving label data', u'<b>%s</b>' % e)
@@ -1606,7 +1612,10 @@ class MainWindow(QMainWindow, WindowMixin):
         self.canvas.end_move(copy=False)
         self.set_dirty()
 
-    def load_predefined_classes(self, predef_classes_file):
+    def load_predefined_classes(self, predef_classes_file: str):
+        if not os.path.exists(predef_classes_file):
+            log.warn(f"file not exist:{predef_classes_file}")
+            
         if os.path.exists(predef_classes_file) is True:
             with codecs.open(predef_classes_file, 'r', 'utf8') as f:
                 for line in f:
@@ -1631,14 +1640,16 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def load_yolo_txt_by_filename(self, txt_path):
         if self.file_path is None:
+            log.warn(f"no path {self.file_path}")
             return
         if os.path.isfile(txt_path) is False:
+            log.warn(f"{txt_path} is NOT file")
             return
 
         self.set_format(FORMAT_YOLO)
         t_yolo_parse_reader = YoloReader(txt_path, self.image)
         shapes = t_yolo_parse_reader.get_shapes()
-        print(shapes)
+        # log.debug("[load_yolo_txt_by_filename] ", shapes)
         self.load_labels(shapes)
         self.canvas.verified = t_yolo_parse_reader.verified
 
@@ -1696,7 +1707,8 @@ def get_main_app(argv=None):
     argparser = argparse.ArgumentParser()
     argparser.add_argument("image_dir", nargs="?")
     argparser.add_argument("class_file",
-                           default=os.path.join(os.path.dirname(__file__), "data", "predefined_classes.txt"),
+                        #    default=os.path.join(os.path.dirname(__file__), "data", "predefined_classes.txt"),
+                           default="./predefined_classes.txt",
                            nargs="?")
     argparser.add_argument("save_dir", nargs="?")
     args = argparser.parse_args(argv[1:])

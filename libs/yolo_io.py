@@ -2,6 +2,8 @@
 # -*- coding: utf8 -*-
 import codecs
 import os
+import log
+from pathlib import Path
 
 from libs.constants import DEFAULT_ENCODING
 
@@ -86,14 +88,20 @@ class YoloReader:
         self.shapes = []
         self.file_path = file_path
 
+        # log.debug("file_path=", file_path)
+        # log.debug("image=", image)
+        # log.debug("class_list_path=", class_list_path)
+
         if class_list_path is None:
             dir_path = os.path.dirname(os.path.realpath(self.file_path))
             self.class_list_path = os.path.join(dir_path, "classes.txt")
+            if not Path(self.class_list_path).exists():
+                self.class_list_path = os.path.join("./", "predefined_classes.txt")
         else:
             self.class_list_path = class_list_path
 
-        # print (file_path, self.class_list_path)
-
+        log.info(f"use {self.class_list_path}")
+        assert Path(self.class_list_path).exists(), f"{self.class_list_path} not exist"
         classes_file = open(self.class_list_path, 'r')
         self.classes = classes_file.read().strip('\n').split('\n')
 
@@ -115,10 +123,12 @@ class YoloReader:
 
     def add_shape(self, label, x_min, y_min, x_max, y_max, difficult):
 
-        points = [(x_min, y_min), (x_max, y_min), (x_max, y_max), (x_min, y_max)]
+        points = [(x_min, y_min), (x_max, y_min), (x_max, y_max), (x_min, y_max)] # 4 points of rect
         self.shapes.append((label, points, None, None, difficult))
 
     def yolo_line_to_shape(self, class_index, x_center, y_center, w, h):
+        if int(class_index) >= len(self.classes):
+            log.critical(f"class_index out of range: {class_index}, {self.classes}")
         label = self.classes[int(class_index)]
 
         x_min = max(float(x_center) - float(w) / 2, 0)

@@ -1,5 +1,6 @@
 import os
 import pickle
+import log
 
 
 class Settings(object):
@@ -34,6 +35,7 @@ class Settings(object):
                     self.data = pickle.load(f)
                     return True
         except:
+            log.critical('Loading setting failed')
             print('Loading setting failed')
         return False
 
