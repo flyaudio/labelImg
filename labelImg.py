@@ -6,6 +6,7 @@ import os.path
 import platform
 import shutil
 import sys
+import traceback
 import webbrowser as wb
 from functools import partial
 import log
@@ -94,7 +95,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
         # Save as Pascal voc xml
         self.default_save_dir = default_save_dir
-        self.label_file_format = settings.get(SETTING_LABEL_FILE_FORMAT, LabelFileFormat.PASCAL_VOC)
+        self.label_file_format = settings.get(SETTING_LABEL_FILE_FORMAT, LabelFileFormat.YOLO)
 
         # For loading all image under a directory
         self.m_img_list = []
@@ -1184,7 +1185,11 @@ class MainWindow(QMainWindow, WindowMixin):
         return '[{} / {}]'.format(self.cur_img_idx + 1, self.img_count)
 
     def show_bounding_box_from_annotation_file(self, file_path):
+        if file_path is None:
+            return
+        log.info("default_save_dir=", self.default_save_dir)
         if self.default_save_dir is not None:
+            log.info("file_path=", file_path)
             basename = os.path.basename(os.path.splitext(file_path)[0])
             xml_path = os.path.join(self.default_save_dir, basename + XML_EXT)
             txt_path = os.path.join(self.default_save_dir, basename + TXT_EXT)
@@ -1731,4 +1736,12 @@ def main():
     return app.exec_()
 
 if __name__ == '__main__':
-    sys.exit(main())
+    try:
+        main()
+    except Exception as e:
+        log.error("="*50 + " 程序运行出错 " + "="*50)
+        traceback.print_exc()
+        log.error("="*100)
+        input("\n程序出错,按任意键退出...")
+        sys.exit(1)    
+    # sys.exit(main())
