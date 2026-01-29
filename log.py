@@ -193,14 +193,10 @@ def critical(*param):
     showMsgBox("critical", msg)
     # raise RuntimeError('critical: ' + msg)
 
+info("=====================================")
+info("===============start=================")
+
 ############################################################
-def test():
-    debug("===debug===")
-    info("===info===", 1, 2)
-    info("===info===","ab")
-    warn("===warn===")
-    error("===error===")
-    critical("===critical===")
 
 def test_msgbox():
     import sys
