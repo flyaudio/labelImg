@@ -1,6 +1,6 @@
-
+import unittest
 from unittest import TestCase
-
+import setup
 from labelImg import get_main_app
 
 
@@ -18,3 +18,5 @@ class TestMainWindow(TestCase):
 
     def test_noop(self):
         pass
+if __name__ == '__main__':
+    unittest.main()

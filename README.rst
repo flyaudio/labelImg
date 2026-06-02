@@ -315,3 +315,6 @@ Stargazers over time
 
 .. image:: https://starchart.cc/tzutalin/labelImg.svg
 
+
+## pyqt documentation
+https://doc.qt.io/qtforpython-6/PySide6/QtWidgets/QToolButton.html

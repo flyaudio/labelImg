@@ -11,6 +11,8 @@ except ImportError:
 
 from libs.shape import Shape
 from libs.utils import distance
+import numpy as np
+import cv2
 
 CURSOR_DEFAULT = Qt.ArrowCursor
 CURSOR_POINT = Qt.PointingHandCursor
@@ -19,6 +21,42 @@ CURSOR_MOVE = Qt.ClosedHandCursor
 CURSOR_GRAB = Qt.OpenHandCursor
 
 # class Canvas(QGLWidget):
+
+
+def pixmapToNumpy(pixmap: QPixmap) -> np.ndarray:
+    # 1. QPixmap 转 QImage
+    q_img = pixmap.toImage().convertToFormat(QImage.Format_RGB888)
+    # 2. 获取图像宽高
+    w, h = q_img.width(), q_img.height()
+    # 3. 提取像素数据 → 转numpy → 重塑形状
+    ptr = q_img.bits()
+    ptr.setsize(h * w * 3)
+    arr = np.array(ptr).reshape(h, w, 3)
+    # 4. RGB → BGR (OpenCV默认用BGR)
+    return cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+
+
+def numpyToPixmap(img: np.ndarray) -> QPixmap:
+    h, w = img.shape[:2]
+    # 1. BGR → RGB (Qt用RGB)
+    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    h, w, ch = img_rgb.shape
+    bytes_per_line = ch * w
+    # 2. numpy → QImage
+    q_img = QImage(img_rgb.data, w, h, bytes_per_line, QImage.Format_RGB888)
+    # 3. QImage → QPixmap
+    return QPixmap.fromImage(q_img)
+
+
+def hist_equalize(im, clahe=True, bgr=False):
+    # Equalize histogram on BGR image 'im' with im.shape(n,m,3) and range 0-255
+    yuv = cv2.cvtColor(im, cv2.COLOR_BGR2YUV if bgr else cv2.COLOR_RGB2YUV)
+    if clahe:
+        c = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        yuv[:, :, 0] = c.apply(yuv[:, :, 0])
+    else:
+        yuv[:, :, 0] = cv2.equalizeHist(yuv[:, :, 0])  # equalize Y channel histogram
+    return cv2.cvtColor(yuv, cv2.COLOR_YUV2BGR if bgr else cv2.COLOR_YUV2RGB)  # convert YUV image to RGB
 
 
 class Canvas(QWidget):
@@ -508,9 +546,14 @@ class Canvas(QWidget):
         temp = self.pixmap
         if self.overlay_color:
             temp = QPixmap(self.pixmap)
+            aa = pixmapToNumpy(temp)
+            aa = hist_equalize(aa, clahe=True, bgr=True)
+            temp = numpyToPixmap(aa)
             painter = QPainter(temp)
-            painter.setCompositionMode(painter.CompositionMode_Overlay)
-            painter.fillRect(temp.rect(), self.overlay_color)
+            # painter.setCompositionMode(painter.CompositionMode_Overlay)
+            # painter.fillRect(temp.rect(), self.overlay_color)
+            # print("rect=", temp.rect())
+            # print("overlay_color==", self.overlay_color.red(), self.overlay_color.green(), self.overlay_color.blue())
             painter.end()
 
         p.drawPixmap(0, 0, temp)

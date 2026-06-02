@@ -56,7 +56,7 @@ __appname__ = 'labelTask'
 class WindowMixin(object):
 
     def menu(self, title, actions=None):
-        menu = self.menuBar().addMenu(title)
+        menu = self.menuBar().addMenu(title) # QMenuBar对象
         if actions:
             add_actions(menu, actions)
         return menu
@@ -546,6 +546,31 @@ class MainWindow(QMainWindow, WindowMixin):
         if self.file_path and os.path.isdir(self.file_path):
             self.open_dir_dialog(dir_path=self.file_path, silent=True)
 
+        self._initCategory()
+        self._initCyleShape()
+
+    def _initCategory(self):
+        action = partial(new_action, self)
+        self.changeCategoryActions = []
+        for i, class_name in enumerate(self.label_hist[:9]):  # 最多取前9个
+            n = action(text=f"change_to_{class_name}",
+                   slot=lambda checked, c=class_name: self.fast_change_label(c),
+                   shortcut=f"{i+1}",
+                   # shortcut=f"Alt+{i+1}",
+                   enabled=False)
+            add_actions(self.menus.edit, [n])
+            self.changeCategoryActions.append(n)
+
+    def _initCyleShape(self):
+        action = partial(new_action, self)
+        n = action(
+            text="Cycle Shapes",
+            slot=self.cycleShapes,
+            shortcut="F",
+            enabled=True  # 始终启用，函数内部会自动判断当前有没有框
+        )
+        add_actions(self.menus.edit, [n])
+
     def keyReleaseEvent(self, event):
         if event.key() == Qt.Key_Control:
             self.canvas.set_drawing_shape_to_square(False)
@@ -554,6 +579,19 @@ class MainWindow(QMainWindow, WindowMixin):
         if event.key() == Qt.Key_Control:
             # Draw rectangle if Ctrl is pressed
             self.canvas.set_drawing_shape_to_square(True)
+        # print("11 : ", event.key())
+        # if event.modifiers() & Qt.AltModifier:
+        #     # Alt+1到Alt+9对应类别1到9
+        #     if Qt.Key_1 <= event.key() <= Qt.Key_9:
+        #         class_number = event.key() - Qt.Key_0
+        #         print("user press: ", event.key())
+        #         # self.change_selected_shape_class(str(class_number))
+        #         return
+        #     # Alt+0对应类别0
+        #     elif event.key() == Qt.Key_0:
+        #         print("user press: ", event.key())
+        #         # self.change_selected_shape_class("0")
+        #         return
 
     # Support Functions #
     def set_format(self, save_format):
@@ -769,6 +807,36 @@ class MainWindow(QMainWindow, WindowMixin):
             self.set_dirty()
             self.update_combo_box()
 
+    def fast_change_label(self, label_name):
+        if self.canvas.selected_shape:
+            shape = self.canvas.selected_shape
+            if shape in self.shapes_to_items:
+                item = self.shapes_to_items[shape]
+                item.setText(label_name)
+                self.canvas.update()
+                self.set_dirty()
+
+    def cycleShapes(self):
+        count = self.label_list.count()
+        if count <= 1:
+            return
+
+        # 2. 获取当前选中行的索引（如果没有选中任何行，返回的是 -1）
+        current_row = self.label_list.currentRow()
+
+        # 3. 计算下一行的索引。使用 % count 确保加到最后一行时，自动回到第 0 行（循环）
+        next_row = (current_row + 1) % count
+
+        # 4. 选中右侧列表的下一行
+        item = self.label_list.item(next_row)
+        self.label_list.setCurrentItem(item)
+
+        # 5. 同步让左侧画布（Canvas）也高亮选中这个框
+        if hasattr(self, 'itemsToShapes') and item in self.items_to_shapes:
+            shape = self.items_to_shapes[item]
+            self.canvas.selectShape(shape)
+            self.canvas.update()
+
     # Tzutalin 20160906 : Add file list and dock to move faster
     def file_item_double_clicked(self, item=None):
         self.cur_img_idx = self.m_img_list.index(ustr(item.text()))
@@ -818,6 +886,10 @@ class MainWindow(QMainWindow, WindowMixin):
         self.actions.edit.setEnabled(selected)
         self.actions.shapeLineColor.setEnabled(selected)
         self.actions.shapeFillColor.setEnabled(selected)
+
+        if hasattr(self, 'changeCategoryActions'):
+            for a in self.changeCategoryActions:
+                a.setEnabled(selected)
 
     def add_label(self, shape):
         shape.paint_label = self.display_label_option.isChecked()
@@ -1726,6 +1798,8 @@ def get_main_app(argv=None):
     win = MainWindow(args.image_dir,
                      args.class_file,
                      args.save_dir)
+    print("="*40)
+    print(type(win.menuBar()))
     win.show()
     return app, win
 
