@@ -80,6 +80,24 @@ def format_shortcut(text):
 
 
 def generate_color_by_text(text):
+    alpha = 120
+    COLORS_MAP = {
+        "OK": QColor(0, 255, 0, alpha),  # 绿
+        "OK1": QColor(0, 255, 0, alpha),  # 绿
+        "CQ": QColor(255, 0, 0, alpha),  # 红
+        "BD": QColor(0, 0, 255, alpha),  # 蓝
+        "NG": QColor(255, 255, 0, alpha),  # 黄
+        "NG1": QColor(255, 255, 0, alpha),  # 黄
+        "NG2": QColor(255, 0, 255, alpha),  # 紫
+        "OK2": QColor(0, 255, 255, alpha),  # 青
+        "NG3": QColor(255, 128, 0, alpha),  # 橙
+        "NG4": QColor(128, 0, 255, alpha),  # 紫蓝
+        "NG5": QColor(255, 20, 147, alpha),  # 深粉
+        "NG6": QColor(0, 128, 128, alpha),  # 蓝绿
+    }
+    text_lower = text.strip().upper()
+    if text_lower in COLORS_MAP:
+        return COLORS_MAP[text_lower]
     s = ustr(text)
     hash_code = int(hashlib.sha256(s.encode('utf-8')).hexdigest(), 16)
     r = int((hash_code / 255) % 255)
