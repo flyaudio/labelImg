@@ -3,3 +3,4 @@ CQ
 BD
 NG1
 NG2
+WIDTH

@@ -2,12 +2,13 @@
 # -*- coding: utf-8 -*-
 
 
-try:
-    from PyQt5.QtGui import *
-    from PyQt5.QtCore import *
-except ImportError:
-    from PyQt4.QtGui import *
-    from PyQt4.QtCore import *
+# try:
+from PyQt5 import QtGui
+from PyQt5.QtGui import *
+from PyQt5.QtCore import *
+# except ImportError:
+#     from PyQt4.QtGui import *
+#     from PyQt4.QtCore import *
 
 from libs.utils import distance
 import sys
@@ -85,10 +86,11 @@ class Shape(object):
     def set_open(self):
         self._closed = False
 
-    def paint(self, painter):
+    def paint(self, painter: QtGui.QPainter):
+        """Paint shape using QPainter"""
         if self.points:
             color = self.select_line_color if self.selected else self.line_color
-            pen = QPen(color)
+            pen = QPen(color) #画笔
             # Try using integer sizes for smoother drawing(?)
             pen.setWidth(max(1, int(round(3.0 / self.scale))))
             painter.setPen(pen)
@@ -103,13 +105,13 @@ class Shape(object):
             # self.drawVertex(vertex_path, 0)
 
             for i, p in enumerate(self.points):
-                line_path.lineTo(p)
+                line_path.lineTo(p)  # 逐点连线
                 self.draw_vertex(vertex_path, i)
             if self.is_closed():
-                line_path.lineTo(self.points[0])
+                line_path.lineTo(self.points[0])  # 闭环
 
-            painter.drawPath(line_path)
-            painter.drawPath(vertex_path)
+            painter.drawPath(line_path)  # 画出多边形的边框线条
+            painter.drawPath(vertex_path)  # 画出顶点的轮廓
             painter.fillPath(vertex_path, self.vertex_fill_color)
 
             # Draw text at the top-left
@@ -135,7 +137,7 @@ class Shape(object):
                 color = self.select_fill_color if self.selected else self.fill_color
                 painter.fillPath(line_path, color)
 
-    def draw_vertex(self, path, i):
+    def draw_vertex(self, path: QPainterPath, i):
         d = self.point_size / self.scale
         shape = self.point_type
         point = self.points[i]
@@ -165,7 +167,7 @@ class Shape(object):
     def contains_point(self, point):
         return self.make_path().contains(point)
 
-    def make_path(self):
+    def make_path(self) -> QPainterPath:
         path = QPainterPath(self.points[0])
         for p in self.points[1:]:
             path.lineTo(p)
