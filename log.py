@@ -14,7 +14,7 @@ from pathlib import Path
 # import setup
 # import utils.conf as conf
 # import utils.pathUtil as pathUtil
-from PyQt5.QtWidgets import QMessageBox, QApplication
+from PyQt6.QtWidgets import QMessageBox, QApplication
 
 
 _init_lock = threading.Lock()
@@ -37,7 +37,7 @@ def showMsgBox(level, message):
         else:
             msg_box.setIcon(QMessageBox.Information)
 
-        msg_box.exec_()
+        msg_box.exec()
 
 
 # def closeWerkzeugLogger():

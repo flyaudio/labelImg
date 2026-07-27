@@ -3,9 +3,9 @@
 
 
 # try:
-from PyQt5 import QtGui
-from PyQt5.QtGui import *
-from PyQt5.QtCore import *
+from PyQt6 import QtGui
+from PyQt6.QtGui import *
+from PyQt6.QtCore import *
 # except ImportError:
 #     from PyQt4.QtGui import *
 #     from PyQt4.QtCore import *

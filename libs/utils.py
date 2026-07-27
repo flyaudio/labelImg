@@ -4,15 +4,17 @@ import hashlib
 import re
 import sys
 
-try:
-    from PyQt5.QtGui import *
-    from PyQt5.QtCore import *
-    from PyQt5.QtWidgets import *
-    QT5 = True
-except ImportError:
-    from PyQt4.QtGui import *
-    from PyQt4.QtCore import *
-    QT5 = False
+# try:
+# from PyQt6.QtCore import QRegularExpression
+# from PyQt6.QtGui import QRegularExpressionValidator
+from PyQt6.QtGui import *
+from PyQt6.QtCore import *
+from PyQt6.QtWidgets import *
+# QT5 = True
+# except ImportError:
+#     from PyQt4.QtGui import *
+#     from PyQt4.QtCore import *
+#     QT5 = False
 
 
 def new_icon(icon):
@@ -61,7 +63,8 @@ def add_actions(widget, actions):
 
 
 def label_validator():
-    return QRegExpValidator(QRegExp(r'^[^ \t].+'), None)
+    # return QRegExpValidator(QRegExp(r'^[^ \t].+'), None)
+    return QRegularExpressionValidator(QRegularExpression(r'^[^ \t].+'), None)
 
 
 class Struct(object):
@@ -127,9 +130,9 @@ def natural_sort(list, key=lambda s:s):
 
 
 # QT4 has a trimmed method, in QT5 this is called strip
-if QT5:
-    def trimmed(text):
-        return text.strip()
-else:
-    def trimmed(text):
-        return text.trimmed()
+# if QT5:
+def trimmed(text):
+    return text.strip()
+# else:
+#     def trimmed(text):
+#         return text.trimmed()

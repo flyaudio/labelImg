@@ -4,20 +4,33 @@
 if items were added in files in the resources/strings folder,
 then execute "pyrcc5 resources.qrc -o resources.py" in the root directory
 and execute "pyrcc5 ../resources.qrc -o resources.py" in the libs directory
+
+pip install pyside6
+pyside6-rcc ../resources.qrc -o resources.py
+手动改成：from PyQt6 import QtCore
 """
 import re
 import os
 import sys
 import locale
+from PyQt6.QtCore import *
 from libs.ustr import ustr
+import libs.resources
 
-try:
-    from PyQt5.QtCore import *
-except ImportError:
-    if sys.version_info.major >= 3:
-        import sip
-        sip.setapi('QVariant', 2)
-    from PyQt4.QtCore import *
+
+def create_lookup_fallback_list(locale_str):
+    result_paths = []
+    base_path = ":/strings"
+    result_paths.append(base_path)
+    if locale_str is not None:
+        # Don't follow standard BCP47. Simple fallback
+        tags = re.split('[^a-zA-Z]', locale_str)
+        print("tags:", tags)
+        for tag in tags:
+            last_path = result_paths[-1]
+            result_paths.append(last_path + '-' + tag)
+
+    return result_paths
 
 
 class StringBundle:
@@ -28,6 +41,7 @@ class StringBundle:
         assert(create_key == StringBundle.__create_key), "StringBundle must be created using StringBundle.getBundle"
         self.id_to_message = {}
         paths = self.__create_lookup_fallback_list(locale_str)
+        print("paths=", paths)
         for path in paths:
             self.__load_bundle(path)
 
@@ -40,7 +54,7 @@ class StringBundle:
             except:
                 print('Invalid locale')
                 locale_str = 'en'
-
+        print("locale_str=", locale_str)
         return StringBundle(cls.__create_key, locale_str)
 
     def get_string(self, string_id):
@@ -64,9 +78,9 @@ class StringBundle:
         PROP_SEPERATOR = '='
         f = QFile(path)
         if f.exists():
-            if f.open(QIODevice.ReadOnly | QFile.Text):
+            if f.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
                 text = QTextStream(f)
-                text.setCodec("UTF-8")
+                text.setEncoding(QStringConverter.Encoding.Utf8)
 
             while not text.atEnd():
                 line = ustr(text.readLine())

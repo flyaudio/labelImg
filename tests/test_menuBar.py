@@ -1,7 +1,7 @@
 import sys
-from PyQt5.QtGui import *
-from PyQt5.QtWidgets import *
-from PyQt5.QtCore import *
+from PyQt6.QtGui import *
+from PyQt6.QtWidgets import *
+from PyQt6.QtCore import *
 
 class MenuDemo(QMainWindow):
     def __init__(self,parent=None):
@@ -45,4 +45,4 @@ if __name__ == '__main__':
     app=QApplication(sys.argv)
     demo=MenuDemo()
     demo.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

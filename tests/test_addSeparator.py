@@ -1,7 +1,7 @@
 import sys
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QToolBar,
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QToolBar,
                              QAction, QMenuBar)
-from PyQt5.QtCore import Qt
+from PyQt6.QtCore import Qt
 
 # --------------------- 完全复刻你看到的 LabelImg 工具类 ---------------------
 # 批量添加动作的工具函数（LabelImg 源码里的函数）
@@ -23,7 +23,7 @@ class WindowMixin(object):
     def toolbar(self, title, actions=None):
         toolbar = QToolBar(title)
         toolbar.setObjectName(u'%sToolBar' % title)
-        toolbar.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
         if actions:
             add_actions(toolbar, actions)
         self.addToolBar(Qt.RightToolBarArea, toolbar)
@@ -71,4 +71,4 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
