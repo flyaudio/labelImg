@@ -16,6 +16,17 @@ import locale
 from PyQt6.QtCore import *
 from libs.ustr import ustr
 import libs.resources
+import log
+
+
+g_str_map = None
+
+
+def get_str(key: str) -> str:
+    global g_str_map
+    if g_str_map is None:
+        g_str_map = StringBundle.get_bundle()
+    return g_str_map.get_string(key)
 
 
 def create_lookup_fallback_list(locale_str):
@@ -58,7 +69,10 @@ class StringBundle:
         return StringBundle(cls.__create_key, locale_str)
 
     def get_string(self, string_id):
-        assert(string_id in self.id_to_message), "Missing string id : " + string_id
+        # assert(string_id in self.id_to_message), "Missing string id : " + string_id
+        if string_id not in self.id_to_message:
+            log.warn(f"Missing string id: {string_id}")
+            return string_id
         return self.id_to_message[string_id]
 
     def __create_lookup_fallback_list(self, locale_str):

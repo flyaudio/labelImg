@@ -14,6 +14,7 @@ import log
 # from PyQt6.QtGui import *
 # from PyQt6.QtCore import *
 # from PyQt6.QtWidgets import *
+from PyQt6.QtCore import Qt, pyqtSlot
 
 from libs.combobox import ComboBox
 from libs.default_label_combobox import DefaultLabelComboBox
@@ -38,6 +39,9 @@ from libs.create_ml_io import CreateMLReader
 from libs.create_ml_io import JSON_EXT
 from libs.ustr import ustr
 from libs.hashableQListWidgetItem import HashableQListWidgetItem
+from auto_labeling.auto_labeling import (AutoLabelingWidget,
+                                         get_labeling_instruction)
+
 
 __appname__ = 'labelTask'
 
@@ -185,22 +189,23 @@ class MainWindow(QMainWindow, WindowMixin):
         self.canvas.lightRequest.connect(self.light_request)
         self.canvas.set_drawing_shape_to_square(settings.get(SETTING_DRAW_SQUARE, False))
 
-        scroll = QScrollArea()
-        scroll.setWidget(self.canvas)
-        scroll.setWidgetResizable(True)
-        self.scroll_bars = {
-            Qt.Orientation.Vertical: scroll.verticalScrollBar(),
-            Qt.Orientation.Horizontal: scroll.horizontalScrollBar()
-        }
-        self.scroll_area = scroll
-        self.canvas.scrollRequest.connect(self.scroll_request)
-
-        self.canvas.newShape.connect(self.new_shape)
-        self.canvas.shapeMoved.connect(self.set_dirty)
-        self.canvas.selectionChanged.connect(self.shape_selection_changed)
-        self.canvas.drawingPolygon.connect(self.toggle_drawing_sensitive)
-
-        self.setCentralWidget(scroll)
+        # scroll = QScrollArea()
+        # scroll.setWidget(self.canvas)
+        # scroll.setWidgetResizable(True)
+        # self.scroll_bars = {
+        #     Qt.Orientation.Vertical: scroll.verticalScrollBar(),
+        #     Qt.Orientation.Horizontal: scroll.horizontalScrollBar()
+        # }
+        # self.scroll_area = scroll
+        # self.canvas.scrollRequest.connect(self.scroll_request)
+        #
+        # self.canvas.newShape.connect(self.new_shape)
+        # self.canvas.shapeMoved.connect(self.set_dirty)
+        # self.canvas.selectionChanged.connect(self.shape_selection_changed)
+        # self.canvas.drawingPolygon.connect(self.toggle_drawing_sensitive)
+        #
+        # self.setCentralWidget(scroll)
+        self._initCenterWidget()
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.dock)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.file_dock)
         self.file_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetFloatable)
@@ -537,6 +542,102 @@ class MainWindow(QMainWindow, WindowMixin):
 
         self._initCategory()
         self._initCyleShape()
+
+    def _initAiConnect(self, widget):
+        # widget.auto_segmentation_requested.connect(
+        #     self.on_auto_segmentation_requested
+        # )
+        # widget.auto_segmentation_disabled.connect(
+        #     self.on_auto_segmentation_disabled
+        # )
+        self.canvas.auto_labeling_marks_updated.connect(
+            widget.on_new_marks
+        )
+        widget.auto_labeling_mode_changed.connect(
+            self.canvas.set_auto_labeling_mode
+        )
+        # widget.auto_decode_mode_changed.connect(
+        #     self.canvas.set_auto_decode_mode
+        # )
+        # widget.cropping_mode_changed.connect(
+        #     widget.model_manager.set_cropping_mode
+        # )
+        # widget.clear_auto_decode_requested.connect(
+        #     self.canvas.reset_auto_decode_state
+        # )
+        # self.canvas.auto_decode_requested.connect(
+        #     self.on_auto_decode_requested
+        # )
+        # self.canvas.auto_decode_finish_requested.connect(
+        #     widget.on_finish_clicked
+        # )
+        # self.canvas.shape_hover_changed.connect(
+        #     lambda: (
+        #         self.update_navigator_shapes()
+        #         if (
+        #             hasattr(self, "navigator_dialog")
+        #             and self.navigator_dialog.isVisible()
+        #         )
+        #         else None
+        #     )
+        # )
+        # widget.clear_auto_labeling_action_requested.connect(
+        #     self.clear_auto_labeling_marks
+        # )
+        widget.finish_auto_labeling_object_action_requested.connect(
+            self.finish_auto_labeling_object
+        )
+        # widget.cache_auto_label_changed.connect(
+        #     self.set_cache_auto_label
+        # )
+        widget.model_manager.prediction_started.connect(
+            lambda: self.canvas.set_loading(True, self.tr("Please wait..."))
+        )
+        widget.model_manager.prediction_finished.connect(
+            lambda: self.canvas.set_loading(False)
+        )
+        # widget.model_manager.prediction_finished.connect(
+        #     self.update_thumbnail_display
+        # )
+        # widget.model_manager.model_loaded.connect(
+        #     self.update_thumbnail_display
+        # )
+        self.next_files_changed.connect(
+            widget.model_manager.on_next_files_changed
+        )
+
+    def _initCenterWidget(self):
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        widget = QWidget()
+        widget.setLayout(layout)
+
+        self.label_instruction = QLabel(get_labeling_instruction())
+        self.label_instruction.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.label_instruction)
+
+        self.ai_widget = AutoLabelingWidget(self)
+        self._initAiConnect(self.ai_widget)
+        layout.addWidget(self.ai_widget)
+
+        scroll = QScrollArea()
+        scroll.setWidget(self.canvas)
+        scroll.setWidgetResizable(True)
+        self.scroll_bars = {
+            Qt.Orientation.Vertical: scroll.verticalScrollBar(),
+            Qt.Orientation.Horizontal: scroll.horizontalScrollBar()
+        }
+        self.scroll_area = scroll
+        layout.addWidget(scroll)
+        self.canvas.scrollRequest.connect(self.scroll_request)
+
+        self.canvas.newShape.connect(self.new_shape)
+        self.canvas.shapeMoved.connect(self.set_dirty)
+        self.canvas.selectionChanged.connect(self.shape_selection_changed)
+        self.canvas.drawingPolygon.connect(self.toggle_drawing_sensitive)
+
+        # self.setCentralWidget(scroll)
+        self.setCentralWidget(widget)
 
     def _initCategory(self):
         action = partial(new_action, self)
@@ -1078,6 +1179,7 @@ class MainWindow(QMainWindow, WindowMixin):
     def add_zoom(self, increment=10):
         self.set_zoom(self.zoom_widget.value() + increment)
 
+    @pyqtSlot(int)
     def zoom_request(self, delta):
         # get the current scrollbar positions
         # calculate the percentages ~ coordinates
@@ -1130,6 +1232,7 @@ class MainWindow(QMainWindow, WindowMixin):
         h_bar.setValue(new_h_bar_value)
         v_bar.setValue(new_v_bar_value)
 
+    @pyqtSlot(int)
     def light_request(self, delta):
         self.add_light(5*delta // (8 * 15))
 
@@ -1744,6 +1847,48 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def toggle_draw_square(self):
         self.canvas.set_drawing_shape_to_square(self.draw_squares_option.isChecked())
+
+    @pyqtSlot()
+    def new_shapes_from_auto_labeling(self, result):
+        """Apply auto labeling results to the current image."""
+        if not self.image or not self.image_path:
+            return
+
+        result_image_path = getattr(result, "image_path", None)
+        if result_image_path and self.filename:
+            current_filename = osp.normpath(osp.abspath(self.filename))
+            result_filename = osp.normpath(osp.abspath(result_image_path))
+            if result_filename != current_filename:
+                log.warn(
+                    "Ignore stale result for "
+                    f"{result_filename}; current file is {current_filename}"
+                )
+                return
+
+        # Clear existing shapes
+        if result.replace:
+            self.load_shapes([], replace=True)
+            self.label_list.clear()
+            self.load_shapes(result.shapes, replace=True)
+        else:  # Just update existing shapes
+            # Remove shapes with label AutoLabelingMode.OBJECT
+            for shape in self.canvas.shapes:
+                if shape.label == AutoLabelingMode.OBJECT:
+                    item = self.label_list.find_item_by_shape(shape)
+                    self.label_list.remove_item(item)
+            self.load_shapes(result.shapes, replace=False)
+
+        # Set image description
+        if result.description:
+            description = result.description
+            self.shape_text_label.setText(self.tr("Image Description"))
+            with QtCore.QSignalBlocker(self.shape_text_edit):
+                self.shape_text_edit.setPlainText(description)
+            self.other_data["description"] = description
+            self.shape_text_edit.setDisabled(False)
+
+        self.set_dirty()
+
 
 def inverted(color):
     return QColor(*[255 - v for v in color.getRgb()])
