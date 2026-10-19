@@ -41,8 +41,20 @@ class Shape(object):
             label=None,
             line_color=None,
             difficult=False,
-            paint_label=False
+            paint_label=False,
+
+            score=None,
+            type=None,  #
+            flags=None,
+            group_id=None,
+            description=None,
+            direction=0,
+            attributes=None,
+            kie_linking=None,
     ):
+        '''
+        :param type: "point","line","circle","rectangle","rotation","polygon"
+        '''
         self.label = label
         self.points = []
         self.fill = False

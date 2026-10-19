@@ -3,6 +3,7 @@ import os.path as osp
 import shutil
 import copy
 import yaml
+from pathlib import Path
 import importlib.resources as pkg_resources
 
 import setup
@@ -146,8 +147,9 @@ def get_default_config():
     if osp.exists(old_cfg_file) and not osp.exists(new_cfg_file):
         shutil.copyfile(old_cfg_file, new_cfg_file)
 
-    config_file = "xanylabeling_config.yaml"
-    with pkg_resources.open_text(CONFIGS, config_file) as f:
+    with open(Path(setup.getRootDir()) / "configs/xanylabeling_config.yaml", 'rb') as f:
+    # config_file = "xanylabeling_config.yaml"
+    # with pkg_resources.open_text(CONFIGS, config_file) as f:
         config = yaml.safe_load(f)
 
     if not osp.exists(osp.join(work_dir, ".xanylabelingrc")):

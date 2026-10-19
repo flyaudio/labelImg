@@ -2,6 +2,7 @@ import os
 import copy
 import time
 import yaml
+from pathlib import Path
 import importlib.resources as pkg_resources
 from threading import Lock, Event
 
@@ -67,7 +68,8 @@ class ModelManager(QObject):
 
     def load_model_configs(self):
         # Load list of default models
-        with pkg_resources.open_text(CONFIGS, "models.yaml") as f:
+        with open(Path(setup.getRootDir()) / "configs/models.yaml", "rb") as f:
+        # with pkg_resources.open_text(CONFIGS, "models.yaml") as f:
             model_list = yaml.safe_load(f)
             log.info("default model list:", model_list)
 
@@ -97,7 +99,8 @@ class ModelManager(QObject):
             if config_file.startswith(":/"):  # Config file is in resources
                 config_file_name = config_file[2:]
                 log.warn("11=", config_file_name)
-                resource_path = pkg_resources.files(CONFIGS) / "auto_labeling" / config_file_name
+                # resource_path = pkg_resources.files(CONFIGS) / "auto_labeling" / config_file_name
+                resource_path = Path(setup.getRootDir()) / "configs/auto_labeling" / config_file_name
                 config_content = resource_path.read_text(encoding="utf-8")
                 model_config = yaml.safe_load(config_content)
                 model_config["config_file"] = str(config_file)

@@ -118,8 +118,8 @@ class AutoLabelingWidget(QWidget):
     def __init__(self, parent):
         super().__init__()
         self.parent = parent
-        current_dir = os.path.dirname(__file__)
-        uic.loadUi(os.path.join(current_dir, "auto_labeling.ui"), self)
+        # current_dir = os.path.dirname(__file__)
+        uic.loadUi(os.path.join(setup.getRootDir(), "auto_labeling.ui"), self)
         self.model_selection_scroll_area.setStyleSheet(
             get_model_selection_scroll_area_style()
         )

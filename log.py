@@ -31,11 +31,11 @@ def showMsgBox(level, message):
         msg_box.setText(message)
 
         if level == "warning":
-            msg_box.setIcon(QMessageBox.Warning)
+            msg_box.setIcon(QMessageBox.Icon.Warning)
         elif level.lower() == "critical":
-            msg_box.setIcon(QMessageBox.Critical)
+            msg_box.setIcon(QMessageBox.Icon.Critical)
         else:
-            msg_box.setIcon(QMessageBox.Information)
+            msg_box.setIcon(QMessageBox.Icon.Information)
 
         msg_box.exec()
 

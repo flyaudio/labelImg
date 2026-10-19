@@ -27,6 +27,7 @@ from libs.stringBundle import StringBundle
 from libs.canvas import Canvas
 from libs.zoomWidget import ZoomWidget
 from libs.lightWidget import LightWidget
+from libs.image_enhancement import ImageEnhancementDialog
 from libs.labelDialog import LabelDialog
 from libs.colorDialog import ColorDialog
 from libs.labelFile import LabelFile, LabelFileError, LabelFileFormat
@@ -406,9 +407,15 @@ class MainWindow(QMainWindow, WindowMixin):
             file=self.menu(get_str('menu_file')),
             edit=self.menu(get_str('menu_edit')),
             view=self.menu(get_str('menu_view')),
+            tools=self.menu(get_str('menu_tools')),
             help=self.menu(get_str('menu_help')),
             recentFiles=QMenu(get_str('menu_openRecent')),
             labelList=label_menu)
+
+        self.image_enhancement_action = QAction(get_str('imageEnhance'), self)
+        self.image_enhancement_action.setStatusTip(get_str('imageEnhanceTip'))
+        self.image_enhancement_action.triggered.connect(self.open_image_enhancement)
+        add_actions(self.menus.tools, (self.image_enhancement_action,))
 
         # Auto saving : Enable auto saving if pressing next
         self.auto_saving = QAction(get_str('autoSaveMode'), self)
@@ -535,6 +542,7 @@ class MainWindow(QMainWindow, WindowMixin):
         # Display cursor coordinates at the right of status bar
         self.label_coordinates = QLabel('')
         self.statusBar().addPermanentWidget(self.label_coordinates)
+        self.canvas.coordinateChanged.connect(self.label_coordinates.setText)
 
         # Open Dir if default file
         if self.file_path and os.path.isdir(self.file_path):
@@ -617,7 +625,7 @@ class MainWindow(QMainWindow, WindowMixin):
         layout.addWidget(self.label_instruction)
 
         self.ai_widget = AutoLabelingWidget(self)
-        self._initAiConnect(self.ai_widget)
+        # self._initAiConnect(self.ai_widget)
         layout.addWidget(self.ai_widget)
 
         scroll = QScrollArea()
@@ -636,8 +644,17 @@ class MainWindow(QMainWindow, WindowMixin):
         self.canvas.selectionChanged.connect(self.shape_selection_changed)
         self.canvas.drawingPolygon.connect(self.toggle_drawing_sensitive)
 
-        # self.setCentralWidget(scroll)
-        self.setCentralWidget(widget)
+        self.setCentralWidget(scroll)
+        # self.setCentralWidget(widget)
+
+    def open_image_enhancement(self):
+        dialog = getattr(self, '_image_enhancement_dialog', None)
+        if dialog is None:
+            dialog = ImageEnhancementDialog(self)
+            self._image_enhancement_dialog = dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
 
     def _initCategory(self):
         action = partial(new_action, self)
@@ -846,7 +863,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.actions.editMode.setEnabled(not drawing)
         if not drawing and self.beginner():
             # Cancel creation.
-            print('Cancel creation.')
+            log.debug('Cancel creation.')
             self.canvas.set_editing(True)
             self.canvas.restore_cursor()
             self.actions.create.setEnabled(True)
@@ -1334,9 +1351,9 @@ class MainWindow(QMainWindow, WindowMixin):
             self.setWindowTitle(__appname__ + ' ' + file_path + ' ' + counter)
 
             # Default : select last item if there is at least one item
-            if self.label_list.count():
-                self.label_list.setCurrentItem(self.label_list.item(self.label_list.count() - 1))
-                self.label_list.item(self.label_list.count() - 1).setSelected(True)
+            # if self.label_list.count():
+            #     self.label_list.setCurrentItem(self.label_list.item(self.label_list.count() - 1))
+            #     self.label_list.item(self.label_list.count() - 1).setSelected(True)
 
             self.canvas.setFocus()
             return True
@@ -1419,6 +1436,10 @@ class MainWindow(QMainWindow, WindowMixin):
     def closeEvent(self, event):
         if not self.may_continue():
             event.ignore()
+            return
+        enhancement_dialog = getattr(self, '_image_enhancement_dialog', None)
+        if enhancement_dialog is not None:
+            enhancement_dialog.stop_for_shutdown()
         settings = self.settings
         # If it loads images from dir, don't load it at the beginning
         if self.dir_name is None:

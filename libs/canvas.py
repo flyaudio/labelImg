@@ -1,11 +1,13 @@
 from PyQt6.QtGui import *
 from PyQt6.QtCore import *
 from PyQt6.QtWidgets import *
-
-from libs.shape import Shape
-from libs.utils import distance
 import numpy as np
 import cv2
+from libs.shape import Shape
+from libs.utils import distance
+
+import setup
+import log
 
 CURSOR_DEFAULT = Qt.CursorShape.ArrowCursor
 CURSOR_POINT = Qt.CursorShape.PointingHandCursor
@@ -14,7 +16,7 @@ CURSOR_MOVE = Qt.CursorShape.ClosedHandCursor
 CURSOR_GRAB = Qt.CursorShape.OpenHandCursor
 
 # class Canvas(QGLWidget):
-
+head = '[canvas]'
 
 def pixmapToNumpy(pixmap: QPixmap) -> np.ndarray:
     # 1. QPixmap 转 QImage
@@ -60,6 +62,7 @@ class Canvas(QWidget):
     selectionChanged = pyqtSignal(bool)
     shapeMoved = pyqtSignal()
     drawingPolygon = pyqtSignal(bool)
+    coordinateChanged = pyqtSignal(str)
 
     CREATE, EDIT = list(range(2))  #新建标注/编辑标注
 
@@ -123,6 +126,7 @@ class Canvas(QWidget):
         return self.mode == self.EDIT
 
     def set_editing(self, value=True):
+        log.debug(f"[canvas] edit={value}")
         self.mode = self.EDIT if value else self.CREATE
         if not value:  # Create
             self.un_highlight()
@@ -144,10 +148,11 @@ class Canvas(QWidget):
         pos = self.transform_pos(ev.position())
 
         # Update coordinates in status bar if image is opened
-        window = self.parent().window()
-        if window.file_path is not None:
-            self.parent().window().label_coordinates.setText(
-                'X: %d; Y: %d' % (pos.x(), pos.y()))
+        # window = self.parent().window()
+        # if window.file_path is not None:
+        #     self.parent().window().label_coordinates.setText(
+        #         f'X: {pos.x():.1f}; Y: {pos.y():.1f}')
+        self.coordinateChanged.emit(f'X: {pos.x():.1f}; Y: {pos.y():.1f}')
 
         # Polygon drawing.
         if self.drawing():
@@ -156,8 +161,9 @@ class Canvas(QWidget):
                 # Display annotation width and height while drawing
                 current_width = abs(self.current[0].x() - pos.x())
                 current_height = abs(self.current[0].y() - pos.y())
-                self.parent().window().label_coordinates.setText(
-                        'Width: %d, Height: %d / X: %d; Y: %d' % (current_width, current_height, pos.x(), pos.y()))
+                self.coordinateChanged.emit(f'Width: {current_width:.0f}, Height: {current_height:.0f} / X: {pos.x():.1f}; Y: {pos.y():.1f}')
+                # self.parent().window().label_coordinates.setText(
+                #         'Width: %d, Height: %d / X: %d; Y: %d' % (current_width, current_height, pos.x(), pos.y()))
 
                 color = self.drawing_line_color
                 if self.out_of_pixmap(pos):
@@ -185,7 +191,8 @@ class Canvas(QWidget):
                     direction_y = -1 if pos.y() - min_y < 0 else 1
                     self.line[1] = QPointF(min_x + direction_x * min_size, min_y + direction_y * min_size)
                 else:
-                    self.line[1] = pos
+                    # self.line[1] = pos
+                    self.line.points[1] = pos
 
                 self.line.line_color = color
                 self.prev_point = QPointF()
@@ -218,8 +225,10 @@ class Canvas(QWidget):
                 point3 = self.h_shape[3]
                 current_width = abs(point1.x() - point3.x())
                 current_height = abs(point1.y() - point3.y())
-                self.parent().window().label_coordinates.setText(
-                        'Width: %d, Height: %d / X: %d; Y: %d' % (current_width, current_height, pos.x(), pos.y()))
+                self.coordinateChanged.emit(
+                    f'Width: {current_width:.0f}, Height: {current_height:.0f} / X: {pos.x():.1f}; Y: {pos.y():.1f}')
+                # self.parent().window().label_coordinates.setText(
+                #         'Width: %d, Height: %d / X: %d; Y: %d' % (current_width, current_height, pos.x(), pos.y()))
             elif self.selected_shape and self.prev_point:
                 self.override_cursor(CURSOR_MOVE)
                 self.bounded_move_shape(self.selected_shape, pos)
@@ -231,8 +240,10 @@ class Canvas(QWidget):
                 point3 = self.selected_shape[3]
                 current_width = abs(point1.x() - point3.x())
                 current_height = abs(point1.y() - point3.y())
-                self.parent().window().label_coordinates.setText(
-                        'Width: %d, Height: %d / X: %d; Y: %d' % (current_width, current_height, pos.x(), pos.y()))
+                self.coordinateChanged.emit(
+                    f'Width: {current_width:.0f}, Height: {current_height:.0f} / X: {pos.x():.1f}; Y: {pos.y():.1f}')
+                # self.parent().window().label_coordinates.setText(
+                #         'Width: %d, Height: %d / X: %d; Y: %d' % (current_width, current_height, pos.x(), pos.y()))
             else:
                 # pan
                 delta = ev.pos() - self.pan_initial_pos
@@ -276,8 +287,10 @@ class Canvas(QWidget):
                 point3 = self.h_shape[3]
                 current_width = abs(point1.x() - point3.x())
                 current_height = abs(point1.y() - point3.y())
-                self.parent().window().label_coordinates.setText(
-                        'Width: %d, Height: %d / X: %d; Y: %d' % (current_width, current_height, pos.x(), pos.y()))
+                self.coordinateChanged.emit(
+                    f'Width: {current_width:.0f}, Height: {current_height:.0f} / X: {pos.x():.1f}; Y: {pos.y():.1f}')
+                # self.parent().window().label_coordinates.setText(
+                #         'Width: %d, Height: %d / X: %d; Y: %d' % (current_width, current_height, pos.x(), pos.y()))
                 break
         else:  # Nothing found, clear highlights, reset state.
             if self.h_shape:
@@ -286,7 +299,7 @@ class Canvas(QWidget):
             self.h_vertex, self.h_shape = None, None
             self.override_cursor(CURSOR_DEFAULT)
 
-    def mousePressEvent(self, ev):
+    def mousePressEvent(self, ev):  # override
         pos = self.transform_pos(ev.position())
 
         if ev.button() == Qt.MouseButton.LeftButton:
@@ -351,6 +364,7 @@ class Canvas(QWidget):
             self.repaint()
 
     def handle_drawing(self, pos):
+        # if self.current and self.current.reach_max_points() is False:
         if self.current and self.current.reach_max_points() is False:
             init_pos = self.current[0]
             min_x = init_pos.x()
@@ -361,14 +375,25 @@ class Canvas(QWidget):
             self.current.add_point(QPointF(max_x, min_y))
             self.current.add_point(target_pos)
             self.current.add_point(QPointF(min_x, max_y))
+            for i, p in enumerate(self.current.points):
+                log.debug(f'{head} {i}-{p}')
             self.finalise()
         elif not self.out_of_pixmap(pos):
-            self.current = Shape()
-            self.current.add_point(pos)
-            self.line.points = [pos, pos]
+            # log.debug(f"{head} new cur shape =={type(pos)}")
+            # self.current = Shape()
+            # self.current.add_point(pos)
+            # self.line.points = [pos, pos]
+            self.new_shape(pos)
             self.set_hiding()
             self.drawingPolygon.emit(True)
             self.update()
+
+    def new_shape(self, pos: QPointF):
+        self.create_mode = 'point'
+        log.debug(f"{head} new cur shape")
+        self.current = Shape(type=self.create_mode)
+        self.current.add_point(pos)
+        self.line.points = [pos, pos]
 
     def set_hiding(self, enable=True):
         self._hide_background = self.hide_background if enable else False
@@ -563,7 +588,7 @@ class Canvas(QWidget):
             self.selected_shape_copy.paint(p)
 
         # Paint rect
-        if self.current is not None and len(self.line) == 2:
+        if self.current is not None and len(self.line.points) == 2:
             left_top = self.line[0]
             right_bottom = self.line[1]
             rect_width = right_bottom.x() - left_top.x()
@@ -622,6 +647,64 @@ class Canvas(QWidget):
         self.set_hiding(False)
         self.newShape.emit()
         self.update()
+        # if self.is_ai_mode:
+        #     self.update_prompt()
+
+    def update_prompt(self):
+        """Update the auto labeling marks"""
+        prompts = []
+        for shape in self.shapes:
+            if shape.label == AutoLabelingMode.ADD:
+                if shape.type == "point":
+                    prompts.append(
+                        {
+                            "type": "point",
+                            "data": [
+                                int(shape.points[0].x()),
+                                int(shape.points[0].y()),
+                            ],
+                            "label": 1,
+                        }
+                    )
+                elif shape.shape_type == "rectangle":
+                    prompts.append(
+                        {
+                            "type": "rectangle",
+                            "data": [
+                                int(shape.points[0].x()),
+                                int(shape.points[0].y()),
+                                int(shape.points[2].x()),
+                                int(shape.points[2].y()),
+                            ],
+                            "label": 1,
+                        }
+                    )
+            elif shape.label == AutoLabelingMode.REMOVE:
+                if shape.shape_type == "point":
+                    prompts.append(
+                        {
+                            "type": "point",
+                            "data": [
+                                int(shape.points[0].x()),
+                                int(shape.points[0].y()),
+                            ],
+                            "label": 0,
+                        }
+                    )
+                elif shape.shape_type == "rectangle":
+                    prompts.append(
+                        {
+                            "type": "rectangle",
+                            "data": [
+                                int(shape.points[0].x()),
+                                int(shape.points[0].y()),
+                                int(shape.points[2].x()),
+                                int(shape.points[2].y()),
+                            ],
+                            "label": 0,
+                        }
+                    )
+        self.prompt_changed.emit(prompts)
 
     def close_enough(self, p1, p2):
         # d = distance(p1 - p2)
@@ -666,7 +749,7 @@ class Canvas(QWidget):
     def keyPressEvent(self, ev):
         key = ev.key()
         if key == Qt.Key.Key_Escape and self.current:
-            print('ESC press')
+            log.debug('[canvas] ESC press')
             self.current = None
             self.drawingPolygon.emit(False)
             self.update()
