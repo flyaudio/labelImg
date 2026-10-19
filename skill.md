@@ -20,3 +20,6 @@
 在D:\files\github\labelImg目录下，运行
 pyinstall labelimg.spec -y
 
+
+# 文件生成
+pyuic6 auto_labeling.ui -o ui_auto_labeling.py
