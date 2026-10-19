@@ -3,6 +3,7 @@
 2，通过命令（conda activate labelme）激活对应python环境
 3，文件目录是 D:\files\github\labelImg
 4，顶层运行命令是 python.exe .\labelImg.py
+5，pyinstall打包后的运行方式： 把dist文件夹下的labelImg.exe拷贝覆盖到labeltask文件夹，然后再labeltask文件夹下运行 ./labelImg.exe
 
 
 # 代码情况
@@ -14,4 +15,8 @@
 	change_to_BD
 	change_to_NG1
 	的功能
+
+# 程序打包
+在D:\files\github\labelImg目录下，运行
+pyinstall labelimg.spec -y
 

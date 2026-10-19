@@ -18,7 +18,6 @@ cscope*
 Pipfile
 *.xml
 *.log
-*.spec
 
 # MacOS System-Generated
 .DS_Store
