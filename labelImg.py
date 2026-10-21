@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import argparse
 import codecs
+import os.path as osp
 import os.path
 import platform
 import shutil
@@ -14,7 +15,8 @@ import log
 # from PyQt6.QtGui import *
 # from PyQt6.QtCore import *
 # from PyQt6.QtWidgets import *
-from PyQt6.QtCore import Qt, pyqtSlot
+from PyQt6.QtCore import Qt, QPointF, pyqtSlot
+from PyQt6.QtGui import QKeySequence, QShortcut
 
 from libs.combobox import ComboBox
 from libs.default_label_combobox import DefaultLabelComboBox
@@ -40,8 +42,10 @@ from libs.create_ml_io import CreateMLReader
 from libs.create_ml_io import JSON_EXT
 from libs.ustr import ustr
 from libs.hashableQListWidgetItem import HashableQListWidgetItem
-from auto_labeling.auto_labeling import (AutoLabelingWidget,
-                                         get_labeling_instruction)
+from auto_labeling.auto_labeling import get_labeling_instruction
+from auto_labeling.remote_annotation_widget import RemoteAnnotationWidget
+from auto_labeling.remote_client import REMOTE_OBJECT_LABEL
+from libs.stringBundle import get_str
 
 
 __appname__ = 'labelTask'
@@ -121,6 +125,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
         self.items_to_shapes = {}
         self.shapes_to_items = {}
+        self._remote_prompt_shapes = []
         self.prev_label_text = ''
 
         list_layout = QVBoxLayout()
@@ -549,70 +554,38 @@ class MainWindow(QMainWindow, WindowMixin):
             self.open_dir_dialog(dir_path=self.file_path, silent=True)
 
         self._initCategory()
+        self._init_default_label_shortcuts()
         self._initCyleShape()
 
     def _initAiConnect(self, widget):
-        # widget.auto_segmentation_requested.connect(
-        #     self.on_auto_segmentation_requested
-        # )
-        # widget.auto_segmentation_disabled.connect(
-        #     self.on_auto_segmentation_disabled
-        # )
-        self.canvas.auto_labeling_marks_updated.connect(
-            widget.on_new_marks
+        widget.detections_ready.connect(self.apply_remote_predictions)
+        widget.prompt_session_cleared.connect(self._reset_remote_prompt_session)
+        widget.prompt_session_discarded.connect(self._discard_remote_prompt_session)
+        prompt_finish_signal = getattr(
+            self.canvas, "promptFinishRequested", None
         )
-        widget.auto_labeling_mode_changed.connect(
-            self.canvas.set_auto_labeling_mode
-        )
-        # widget.auto_decode_mode_changed.connect(
-        #     self.canvas.set_auto_decode_mode
-        # )
-        # widget.cropping_mode_changed.connect(
-        #     widget.model_manager.set_cropping_mode
-        # )
-        # widget.clear_auto_decode_requested.connect(
-        #     self.canvas.reset_auto_decode_state
-        # )
-        # self.canvas.auto_decode_requested.connect(
-        #     self.on_auto_decode_requested
-        # )
-        # self.canvas.auto_decode_finish_requested.connect(
-        #     widget.on_finish_clicked
-        # )
-        # self.canvas.shape_hover_changed.connect(
-        #     lambda: (
-        #         self.update_navigator_shapes()
-        #         if (
-        #             hasattr(self, "navigator_dialog")
-        #             and self.navigator_dialog.isVisible()
-        #         )
-        #         else None
-        #     )
-        # )
-        # widget.clear_auto_labeling_action_requested.connect(
-        #     self.clear_auto_labeling_marks
-        # )
-        widget.finish_auto_labeling_object_action_requested.connect(
-            self.finish_auto_labeling_object
-        )
-        # widget.cache_auto_label_changed.connect(
-        #     self.set_cache_auto_label
-        # )
-        widget.model_manager.prediction_started.connect(
-            lambda: self.canvas.set_loading(True, self.tr("Please wait..."))
-        )
-        widget.model_manager.prediction_finished.connect(
-            lambda: self.canvas.set_loading(False)
-        )
-        # widget.model_manager.prediction_finished.connect(
-        #     self.update_thumbnail_display
-        # )
-        # widget.model_manager.model_loaded.connect(
-        #     self.update_thumbnail_display
-        # )
-        self.next_files_changed.connect(
-            widget.model_manager.on_next_files_changed
-        )
+        if prompt_finish_signal is not None:
+            prompt_finish_signal.connect(widget._finish_or_run_prediction)
+
+    def _reset_remote_prompt_session(self):
+        """Keep the current prompt result as a regular editable annotation."""
+        self._remote_prompt_shapes = []
+
+    def _discard_remote_prompt_session(self):
+        """Remove boxes produced in the current prompt round from the canvas."""
+        prompt_shapes = list(getattr(self, "_remote_prompt_shapes", []))
+        current_shapes = list(self.canvas.shapes)
+        discarded_shapes = [shape for shape in prompt_shapes if shape in current_shapes]
+        for shape in discarded_shapes:
+            if shape in self.shapes_to_items:
+                self.remove_label(shape)
+        if discarded_shapes:
+            self.canvas.load_shapes(
+                [shape for shape in current_shapes if shape not in discarded_shapes]
+            )
+            self.update_combo_box()
+            self.set_dirty()
+        self._remote_prompt_shapes = []
 
     def _initCenterWidget(self):
         layout = QVBoxLayout()
@@ -624,8 +597,13 @@ class MainWindow(QMainWindow, WindowMixin):
         self.label_instruction.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.label_instruction)
 
-        self.ai_widget = AutoLabelingWidget(self)
-        # self._initAiConnect(self.ai_widget)
+        self.ai_widget = RemoteAnnotationWidget(self)
+        self._initAiConnect(self.ai_widget)
+        self.remote_prompt_shortcut = QShortcut(QKeySequence("B"), self)
+        self.remote_prompt_shortcut.setContext(Qt.ShortcutContext.WindowShortcut)
+        self.remote_prompt_shortcut.activated.connect(
+            self.ai_widget.handle_b_shortcut
+        )
         layout.addWidget(self.ai_widget)
 
         scroll = QScrollArea()
@@ -644,8 +622,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.canvas.selectionChanged.connect(self.shape_selection_changed)
         self.canvas.drawingPolygon.connect(self.toggle_drawing_sensitive)
 
-        self.setCentralWidget(scroll)
-        # self.setCentralWidget(widget)
+        self.setCentralWidget(widget)
 
     def open_image_enhancement(self):
         dialog = getattr(self, '_image_enhancement_dialog', None)
@@ -662,18 +639,33 @@ class MainWindow(QMainWindow, WindowMixin):
         for i, class_name in enumerate(self.label_hist[:9]):  # 最多取前9个
             n = action(text=f"change_to_{class_name}",
                    slot=lambda checked, c=class_name: self.fast_change_label(c),
-                   shortcut=f"{i+1}",
-                   # shortcut=f"Alt+{i+1}",
+                   shortcut=f"Alt+{i+1}",
                    enabled=False)
             add_actions(self.menus.edit, [n])
             self.changeCategoryActions.append(n)
+
+    def _init_default_label_shortcuts(self):
+        self.default_label_shortcuts = []
+        for index in range(5):
+            shortcut = QShortcut(QKeySequence(str(index + 1)), self)
+            shortcut.setContext(Qt.ShortcutContext.WindowShortcut)
+            shortcut.activated.connect(
+                partial(self.set_default_label_by_index, index)
+            )
+            self.default_label_shortcuts.append(shortcut)
+
+    def set_default_label_by_index(self, index):
+        """Select a predefined label by its zero-based class index."""
+        combo = self.default_label_combo_box.cb
+        if 0 <= index < combo.count():
+            combo.setCurrentIndex(index)
 
     def _initCyleShape(self):
         action = partial(new_action, self)
         n = action(
             text="Cycle Shapes",
             slot=self.cycleShapes,
-            shortcut="F",
+            shortcut="Ctrl+Shift+F",
             enabled=True  # 始终启用，函数内部会自动判断当前有没有框
         )
         add_actions(self.menus.edit, [n])
@@ -795,6 +787,7 @@ class MainWindow(QMainWindow, WindowMixin):
     def reset_state(self):
         self.items_to_shapes.clear()
         self.shapes_to_items.clear()
+        self._remote_prompt_shapes = []
         self.label_list.clear()
         self.file_path = None
         self.image_data = None
@@ -855,8 +848,25 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def create_shape(self):
         assert self.beginner()
+        if hasattr(self, "ai_widget"):
+            self.ai_widget.deactivate_prompt_mode()
         self.canvas.set_editing(False)
         self.actions.create.setEnabled(False)
+        if hasattr(self, "ai_widget"):
+            self.ai_widget.set_manual_drawing_mode(True)
+
+    def exit_manual_drawing_mode(self):
+        """Return canvas input to shape selection and editing mode."""
+        if getattr(self.canvas, "current", None) is not None:
+            self.canvas.cancel_current_shape()
+        if self.beginner():
+            self.canvas.set_editing(True)
+            self.canvas.restore_cursor()
+            self.actions.create.setEnabled(True)
+        else:
+            self.set_edit_mode()
+        if hasattr(self, "ai_widget"):
+            self.ai_widget.set_manual_drawing_mode(False)
 
     def toggle_drawing_sensitive(self, drawing=True):
         """In the middle of drawing, toggling between modes should be disabled."""
@@ -867,6 +877,8 @@ class MainWindow(QMainWindow, WindowMixin):
             self.canvas.set_editing(True)
             self.canvas.restore_cursor()
             self.actions.create.setEnabled(True)
+            if hasattr(self, "ai_widget"):
+                self.ai_widget.set_manual_drawing_mode(False)
 
     def toggle_draw_mode(self, edit=True):
         self.canvas.set_editing(edit)
@@ -875,7 +887,11 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def set_create_mode(self):
         assert self.advanced()
+        if hasattr(self, "ai_widget"):
+            self.ai_widget.deactivate_prompt_mode()
         self.toggle_draw_mode(False)
+        if hasattr(self, "ai_widget"):
+            self.ai_widget.set_manual_drawing_mode(True)
 
     def set_edit_mode(self):
         assert self.advanced()
@@ -1417,10 +1433,11 @@ class MainWindow(QMainWindow, WindowMixin):
         self.zoom_widget.setValue(int(100 * value))
 
     def scale_fit_window(self):
-        """Figure out the size of the pixmap in order to fit the main widget."""
+        """Fit the image inside the canvas viewport, below the AI controls."""
         e = 2.0  # So that no scrollbars are generated.
-        w1 = self.centralWidget().width() - e
-        h1 = self.centralWidget().height() - e
+        viewport = self.scroll_area.viewport()
+        w1 = max(1, viewport.width() - e)
+        h1 = max(1, viewport.height() - e)
         a1 = w1 / h1
         # Calculate a new scale value based on the pixmap's aspect ratio.
         w2 = self.canvas.pixmap.width() - 0.0
@@ -1430,7 +1447,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def scale_fit_width(self):
         # The epsilon does not seem to work too well here.
-        w = self.centralWidget().width() - 2.0
+        w = max(1, self.scroll_area.viewport().width() - 2.0)
         return w / self.canvas.pixmap.width()
 
     def closeEvent(self, event):
@@ -1868,6 +1885,110 @@ class MainWindow(QMainWindow, WindowMixin):
 
     def toggle_draw_square(self):
         self.canvas.set_drawing_shape_to_square(self.draw_squares_option.isChecked())
+
+    @pyqtSlot(str, object, bool, int, bool)
+    def apply_remote_predictions(
+        self,
+        image_path,
+        detections,
+        replace_existing=False,
+        skipped=0,
+        prompt_update=False,
+    ):
+        """Convert remote bbox results to editable labelImg shapes."""
+        if not self.image or not self.file_path:
+            return
+        current_path = osp.normpath(osp.abspath(self.file_path))
+        result_path = osp.normpath(osp.abspath(image_path))
+        if current_path != result_path:
+            log.warn(
+                "Ignore stale remote result for "
+                f"{result_path}; current file is {current_path}"
+            )
+            return
+
+        added_shapes = []
+        for detection in detections:
+            label = detection.get("label", "").strip()
+            if label == REMOTE_OBJECT_LABEL and self.default_label:
+                label = self.default_label
+            points = detection.get("points", [])
+            if not label or len(points) != 4:
+                continue
+
+            shape = Shape(label=label)
+            snapped_points = []
+            for x, y in points:
+                x, y, _ = self.canvas.snap_point_to_canvas(x, y)
+                snapped_points.append((x, y))
+            min_x = min(point[0] for point in snapped_points)
+            max_x = max(point[0] for point in snapped_points)
+            min_y = min(point[1] for point in snapped_points)
+            max_y = max(point[1] for point in snapped_points)
+            if max_x <= min_x or max_y <= min_y:
+                skipped += 1
+                continue
+            snapped_points = [
+                (min_x, min_y),
+                (max_x, min_y),
+                (max_x, max_y),
+                (min_x, max_y),
+            ]
+            for x, y in snapped_points:
+                shape.add_point(QPointF(x, y))
+            shape.close()
+            color = generate_color_by_text(label)
+            shape.line_color = color
+            shape.fill_color = color
+            shape.paint_label = self.display_label_option.isChecked()
+            added_shapes.append(shape)
+
+        existing_shapes = list(self.canvas.shapes)
+        prompt_shapes_removed = []
+        if prompt_update:
+            prompt_shapes_removed = [
+                shape
+                for shape in getattr(self, "_remote_prompt_shapes", [])
+                if shape in existing_shapes
+            ]
+            for shape in prompt_shapes_removed:
+                if shape in self.shapes_to_items:
+                    self.remove_label(shape)
+            existing_shapes = [
+                shape for shape in existing_shapes if shape not in prompt_shapes_removed
+            ]
+            self._remote_prompt_shapes = []
+            if prompt_shapes_removed:
+                self.canvas.load_shapes(existing_shapes)
+
+        if not added_shapes:
+            if prompt_shapes_removed:
+                self.update_combo_box()
+                self.set_dirty()
+            return
+
+        if replace_existing:
+            for shape in existing_shapes:
+                if shape in self.shapes_to_items:
+                    self.remove_label(shape)
+            self.canvas.load_shapes([])
+            existing_shapes = []
+
+        for shape in added_shapes:
+            label = shape.label
+            if label not in self.label_hist:
+                self.label_hist.append(label)
+            self.add_label(shape)
+
+        self.canvas.load_shapes(existing_shapes + added_shapes)
+        if prompt_update:
+            self._remote_prompt_shapes = list(added_shapes)
+        self.update_combo_box()
+        self.set_dirty()
+        message = get_str("remoteAppliedDetections").format(
+            len(added_shapes), skipped
+        )
+        self.statusBar().showMessage(message, 7000)
 
     @pyqtSlot()
     def new_shapes_from_auto_labeling(self, result):

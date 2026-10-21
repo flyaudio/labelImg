@@ -63,6 +63,8 @@ class Canvas(QWidget):
     shapeMoved = pyqtSignal()
     drawingPolygon = pyqtSignal(bool)
     coordinateChanged = pyqtSignal(str)
+    promptMarksChanged = pyqtSignal(object)
+    promptFinishRequested = pyqtSignal()
 
     CREATE, EDIT = list(range(2))  #新建标注/编辑标注
 
@@ -99,6 +101,12 @@ class Canvas(QWidget):
         self.setFocusPolicy(Qt.FocusPolicy.WheelFocus)
         self.verified = False
         self.draw_square = False
+        self.prompt_mode = None
+        self.prompt_marks = []
+        self._prompt_start = None
+        self._prompt_preview = None
+        self._prompt_draw_mode = None
+        self._prompt_finish_pressed = False
 
         # initialisation for panning
         self.pan_initial_pos = QPoint()
@@ -131,8 +139,22 @@ class Canvas(QWidget):
         if not value:  # Create
             self.un_highlight()
             self.de_select_shape()
+        else:
+            self._cursor = CURSOR_DEFAULT
+            self.unsetCursor()
         self.prev_point = QPointF()
         self.repaint()
+
+    def cancel_current_shape(self):
+        """Discard an unfinished manual shape when leaving create mode."""
+        if self.current is None:
+            return False
+        self.current = None
+        self.line.points = []
+        self.set_hiding(False)
+        self.drawingPolygon.emit(False)
+        self.update()
+        return True
 
     def un_highlight(self, shape=None):
         if shape is None or shape == self.h_shape:
@@ -153,6 +175,17 @@ class Canvas(QWidget):
         #     self.parent().window().label_coordinates.setText(
         #         f'X: {pos.x():.1f}; Y: {pos.y():.1f}')
         self.coordinateChanged.emit(f'X: {pos.x():.1f}; Y: {pos.y():.1f}')
+
+        if self.prompt_mode is not None:
+            if (
+                self.prompt_mode.endswith("rectangle")
+                and self._prompt_start is not None
+                and ev.buttons() & Qt.MouseButton.LeftButton
+            ):
+                self._prompt_preview = self._clip_prompt_point(pos)
+            self.override_cursor(CURSOR_POINT)
+            self.update()
+            return
 
         # Polygon drawing.
         if self.drawing():
@@ -302,6 +335,23 @@ class Canvas(QWidget):
     def mousePressEvent(self, ev):  # override
         pos = self.transform_pos(ev.position())
 
+        if self.prompt_mode is not None:
+            if ev.button() == Qt.MouseButton.RightButton:
+                self._prompt_finish_pressed = self.rect().contains(
+                    ev.position().toPoint()
+                )
+            elif ev.button() == Qt.MouseButton.LeftButton and not self.out_of_pixmap(pos):
+                if self.prompt_mode.endswith("point"):
+                    label = 1 if self.prompt_mode.startswith("positive") else 0
+                    self.add_prompt_point(pos, label)
+                else:
+                    self._prompt_start = self._clip_prompt_point(pos)
+                    self._prompt_preview = self._prompt_start
+                    self._prompt_draw_mode = self.prompt_mode
+            self.update()
+            ev.accept()
+            return
+
         if ev.button() == Qt.MouseButton.LeftButton:
             if self.drawing():
                 self.handle_drawing(pos)
@@ -320,6 +370,32 @@ class Canvas(QWidget):
         self.update()
 
     def mouseReleaseEvent(self, ev):
+        if self.prompt_mode is not None:
+            if ev.button() == Qt.MouseButton.RightButton:
+                should_finish = (
+                    self._prompt_finish_pressed
+                    and self.rect().contains(ev.position().toPoint())
+                )
+                self._prompt_finish_pressed = False
+                self.update()
+                ev.accept()
+                if should_finish:
+                    self.promptFinishRequested.emit()
+                return
+            if ev.button() == Qt.MouseButton.LeftButton and self._prompt_start is not None:
+                end = self._clip_prompt_point(self.transform_pos(ev.position()))
+                start = self._prompt_start
+                draw_mode = self._prompt_draw_mode
+                self._prompt_start = None
+                self._prompt_preview = None
+                self._prompt_draw_mode = None
+                if draw_mode and draw_mode.endswith("rectangle"):
+                    label = 1 if draw_mode.startswith("positive") else 0
+                    self.add_prompt_rectangle(start, end, label)
+            self.update()
+            ev.accept()
+            return
+
         if ev.button() == Qt.MouseButton.RightButton:
             menu = self.menus[bool(self.selected_shape_copy)]
             self.restore_cursor()
@@ -340,6 +416,77 @@ class Canvas(QWidget):
             else:
                 # pan
                 QApplication.restoreOverrideCursor()
+
+    def set_prompt_mode(self, mode):
+        """Enable a temporary remote prompt tool, or restore normal canvas input."""
+        valid_modes = {
+            None,
+            "positive-point",
+            "negative-point",
+            "positive-rectangle",
+            "negative-rectangle",
+        }
+        if mode not in valid_modes:
+            raise ValueError("Unknown canvas prompt mode: {}".format(mode))
+        previous_mode = self.prompt_mode
+        self.prompt_mode = mode
+        self._prompt_start = None
+        self._prompt_preview = None
+        self._prompt_draw_mode = None
+        self._prompt_finish_pressed = False
+        if mode is not None:
+            self._cursor = CURSOR_POINT
+            self.setCursor(CURSOR_POINT)
+        elif previous_mode is not None:
+            if self.underMouse() and QApplication.overrideCursor() is not None:
+                self.restore_cursor()
+            self._cursor = CURSOR_DEFAULT
+            self.unsetCursor()
+        self.update()
+
+    def _clip_prompt_point(self, point):
+        return QPointF(
+            min(max(point.x(), 0), self.pixmap.width()),
+            min(max(point.y(), 0), self.pixmap.height()),
+        )
+
+    def add_prompt_point(self, point, label):
+        """Add a positive (1) or negative (0) point prompt in image coordinates."""
+        self.prompt_marks.append(
+            {
+                "type": "point",
+                "data": [float(point.x()), float(point.y())],
+                "label": int(bool(label)),
+            }
+        )
+        self.promptMarksChanged.emit(list(self.prompt_marks))
+        self.update()
+
+    def add_prompt_rectangle(self, first, second, label):
+        """Add a positive (1) or negative (0) rectangle prompt."""
+        x1, x2 = sorted((float(first.x()), float(second.x())))
+        y1, y2 = sorted((float(first.y()), float(second.y())))
+        if x2 <= x1 or y2 <= y1:
+            return False
+        self.prompt_marks.append(
+            {
+                "type": "rectangle",
+                "data": [x1, y1, x2, y2],
+                "label": int(bool(label)),
+            }
+        )
+        self.promptMarksChanged.emit(list(self.prompt_marks))
+        self.update()
+        return True
+
+    def clear_prompt_marks(self):
+        """Clear temporary prompts without changing saved annotation shapes."""
+        self.prompt_marks = []
+        self._prompt_start = None
+        self._prompt_preview = None
+        self._prompt_draw_mode = None
+        self.promptMarksChanged.emit([])
+        self.update()
 
     def end_move(self, copy=False):
         assert self.selected_shape and self.selected_shape_copy
@@ -575,6 +722,7 @@ class Canvas(QWidget):
             painter.end()
 
         p.drawPixmap(0, 0, temp)
+        self._paint_prompt_marks(p)
         Shape.scale = self.scale
         Shape.label_font_size = self.label_font_size
         for shape in self.shapes:
@@ -615,6 +763,47 @@ class Canvas(QWidget):
             self.setPalette(pal)
 
         p.end()
+
+    def _paint_prompt_marks(self, painter):
+        marks = list(self.prompt_marks)
+        if self._prompt_start is not None and self._prompt_preview is not None:
+            mode = self._prompt_draw_mode or self.prompt_mode
+            if mode and mode.endswith("rectangle"):
+                first = self._prompt_start
+                second = self._prompt_preview
+                x1, x2 = sorted((first.x(), second.x()))
+                y1, y2 = sorted((first.y(), second.y()))
+                marks.append(
+                    {
+                        "type": "rectangle",
+                        "data": [x1, y1, x2, y2],
+                        "label": 1 if mode.startswith("positive") else 0,
+                    }
+                )
+
+        painter.save()
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        for mark in marks:
+            positive = mark.get("label", 1) == 1
+            color = QColor(34, 166, 105) if positive else QColor(220, 74, 74)
+            painter.setPen(QPen(color, max(1.0, 2.0 / max(self.scale, 0.01))))
+            if mark.get("type") == "point":
+                x, y = mark["data"]
+                radius = 7.0 / max(self.scale, 0.01)
+                painter.setBrush(QBrush(color))
+                painter.drawEllipse(QPointF(x, y), radius, radius)
+                painter.setPen(QPen(Qt.GlobalColor.white, max(1.0, 1.5 / max(self.scale, 0.01))))
+                if positive:
+                    painter.drawLine(QPointF(x - radius / 2, y), QPointF(x + radius / 2, y))
+                    painter.drawLine(QPointF(x, y - radius / 2), QPointF(x, y + radius / 2))
+                else:
+                    painter.drawLine(QPointF(x - radius / 2, y - radius / 2), QPointF(x + radius / 2, y + radius / 2))
+                    painter.drawLine(QPointF(x - radius / 2, y + radius / 2), QPointF(x + radius / 2, y - radius / 2))
+            elif mark.get("type") == "rectangle":
+                x1, y1, x2, y2 = mark["data"]
+                painter.setBrush(QBrush(QColor(color.red(), color.green(), color.blue(), 32)))
+                painter.drawRect(QRectF(x1, y1, x2 - x1, y2 - y1))
+        painter.restore()
 
     def transform_pos(self, point):
         """Convert from widget-logical coordinates to painter-logical coordinates."""
@@ -828,6 +1017,8 @@ class Canvas(QWidget):
     def load_pixmap(self, pixmap):
         self.pixmap = pixmap
         self.shapes = []
+        self.set_prompt_mode(None)
+        self.clear_prompt_marks()
         self.repaint()
 
     def load_shapes(self, shapes):
@@ -862,6 +1053,8 @@ class Canvas(QWidget):
 
         self.restore_cursor()
         self.pixmap = None
+        self.set_prompt_mode(None)
+        self.clear_prompt_marks()
         self.update()
 
     def set_drawing_shape_to_square(self, status):
