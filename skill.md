@@ -15,6 +15,7 @@
 	change_to_BD
 	change_to_NG1
 	的功能
+3、在菜单栏增加了tool->增强的功能，此功能独立
 
 # 程序打包
 在D:\files\github\labelImg目录下，运行
